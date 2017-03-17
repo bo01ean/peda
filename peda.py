@@ -4405,7 +4405,7 @@ class PEDACmd(object):
         if "stack" in opt or "SIGSEGV" in status:
             self.context_stack(count)
         msg("[%s]" % ("-"*78), "blue")
-        msg("Legend: %s, %s, %s, value" % (red("code"), blue("data"), green("rodata")))
+        msg("Legend: %s, %s, %s, value" % (colorize_by_type("code"), colorize_by_type("data"), colorize_by_type("rodata")))
 
         # display stopped reason
         if "SIG" in status:

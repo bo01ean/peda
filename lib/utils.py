@@ -22,6 +22,7 @@ import functools
 from subprocess import *
 import config
 import codecs
+import os
 
 import six
 from six import StringIO
@@ -439,15 +440,47 @@ def check_badchars(data, chars=None):
     return False
 
 @memoized
-def format_address(addr, type):
-    """Colorize an address"""
+def colorize_by_type(type):
+    if 'PEDA_COLORS_' + type.upper() in os.environ:
+        return 'PEDA_COLORS_' + type.upper()
     colorcodes = {
+        # Addresses
         "data": "blue",
         "code": "red",
         "rodata": "green",
-        "value": None
+        "value": None,
+        # opcodes
+        "cmp": "red",
+        "test": "red",
+        "call": "green",
+        "j": "yellow", # jump
+        "ret": "blue",
+        # context
+        "VULN_FUNCTIONS": "red",
+        "TARGET": "green"
     }
-    return colorize(addr, colorcodes[type])
+    return colorcodes[type]
+
+@memoized
+def stylize_by_type(type):
+    if 'PEDA_STYLES_' + type.upper() in os.environ:
+        return 'PEDA_STYLES_' + type.upper()
+    styles = {
+        "VULN_FUNCTIONS": "bold, underline",
+        "BEFORE_TARGET": "dark",
+        "TARGET": "bold",
+        "COMMENT": "dark"
+    }
+    return styles[type]
+
+@memoized
+def color_and_style_by_type(type):
+    return colorize_by_type(type), stylize_by_type(type)
+
+@memoized
+def format_address(addr, type):
+    """Colorize an address"""
+    return colorize(addr, colorize_by_type(type))
 
 @memoized
 def format_reference_chain(chain):
@@ -497,13 +530,6 @@ def format_disasm_code(code, nearby=None):
     Returns:
         - colorized text code (String)
     """
-    colorcodes = {
-        "cmp": "red",
-        "test": "red",
-        "call": "green",
-        "j": "yellow", # jump
-        "ret": "blue",
-    }
     result = ""
 
     if not code:
@@ -524,16 +550,14 @@ def format_disasm_code(code, nearby=None):
                 result += line + "\n"
                 continue
             addr, opcode = to_int(m.group(1)), m.group(2)
-            for c in colorcodes:
-                if c in opcode:
-                    color = colorcodes[c]
-                    if c == "call":
-                        for f in VULN_FUNCTIONS:
-                            if f in line.split(":\t", 1)[-1]:
-                                style = "bold, underline"
-                                color = "red"
-                                break
-                    break
+            if c in opcode:
+                color = colorize_by_type(c)
+                if c == "call":
+                    for f in VULN_FUNCTIONS:
+                        if f in line.split(":\t", 1)[-1]:
+                            color, style = color_and_style_by_type('VULN_FUNCTIONS')
+                            break
+                break
 
             prefix = line.split(":\t")[0]
             addr = re.search("(0x[^\s]*)", prefix)
@@ -543,14 +567,13 @@ def format_disasm_code(code, nearby=None):
                 addr = -1
             line = "\t" + line.split(":\t", 1)[-1]
             if addr < target:
-                style = "dark"
+                style = stylize_by_type('BEFORE_TARGET')
             elif addr == target:
-                style = "bold"
-                color = "green"
+                color, style = color_and_style_by_type('TARGET')
 
             code = colorize(line.split(";")[0], color, style)
             if ";" in line:
-                comment = colorize(";" + line.split(";", 1)[1], color, "dark")
+                comment = colorize(";" + line.split(";", 1)[1], color, stylize_by_type('COMMENT'))
             else:
                 comment = ""
             line = "%s:%s%s" % (prefix, code, comment)
